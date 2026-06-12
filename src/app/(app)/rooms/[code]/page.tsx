@@ -54,8 +54,9 @@ function LineTicket({ detail, userId }: { detail: LineDetail; userId: number }) 
         )}
       </div>
       <p className="mt-1 text-xs text-ink-faint">
-        {favored.name} must win by more than {line.spread}. Exactly {line.spread} is a push — nobody
-        wins.
+        {Number.isInteger(line.spread)
+          ? `${favored.name} must win by more than ${line.spread} — exactly ${line.spread} is a push, nobody wins.`
+          : `${favored.name} must win by ${line.spread + 0.5} or more — half spreads never push.`}
       </p>
 
       <div className="perf-divider mt-4 pt-4">
