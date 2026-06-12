@@ -161,7 +161,7 @@ export function roomLeaderboard(roomId: number): MemberStanding[] {
        GROUP BY u.id
        ORDER BY points DESC, wins DESC, rm.joined_at ASC`,
     )
-    .all(roomId) as (MemberStanding & { isAdmin: number })[];
+    .all(roomId) as (Omit<MemberStanding, "isAdmin"> & { isAdmin: number })[];
   return rows.map((r) => ({ ...r, isAdmin: Boolean(r.isAdmin) }));
 }
 
@@ -259,6 +259,38 @@ export function roomLines(roomId: number, userId: number, now = new Date()): Lin
   });
 
   return details.sort((a, b) => a.match.kickoff_utc.localeCompare(b.match.kickoff_utc));
+}
+
+export interface LineSettlement {
+  userId: number;
+  name: string;
+  delta: number;
+  outcome: "win" | "loss" | "push";
+}
+
+export function lineSettlements(lineId: number): LineSettlement[] {
+  return getDb()
+    .prepare(
+      `SELECT s.user_id AS userId, u.name, s.delta, s.outcome
+       FROM settlements s JOIN users u ON u.id = s.user_id
+       WHERE s.line_id = ?
+       ORDER BY s.delta DESC, u.name`,
+    )
+    .all(lineId) as LineSettlement[];
+}
+
+/** Matches a room admin can still set a line on: teams known, deadline not passed. */
+export function lineableMatches(now = new Date()): MatchWithTeams[] {
+  const cutoff = new Date(now.getTime() + 6 * 3600_000).toISOString();
+  const rows = getDb()
+    .prepare(
+      `${MATCH_SELECT}
+       WHERE m.status = 'scheduled' AND m.home_team_id IS NOT NULL
+         AND m.away_team_id IS NOT NULL AND m.kickoff_utc > ?
+       ORDER BY m.kickoff_utc, m.id`,
+    )
+    .all(cutoff) as Record<string, unknown>[];
+  return rows.map(rowToMatch);
 }
 
 export interface SettledEntry {
