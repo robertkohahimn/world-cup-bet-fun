@@ -46,5 +46,5 @@ The domain core — spread evaluation, settlement math, group standings — live
 unit-tested modules (`src/lib/settle.ts`, `src/lib/standings.ts`): `npm test`.
 
 Tournament data (`data/worldcup2026.json`) is the real December 2025 draw and official match
-calendar; kickoff times are approximate slot assignments. Edit the JSON and delete `data/wcbet.db`
-to customize.
+calendar, with exact UTC kickoff times converted from the published local kickoffs. Edit the
+JSON and delete `data/wcbet.db` to customize.

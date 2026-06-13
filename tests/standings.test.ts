@@ -55,4 +55,33 @@ describe("computeGroupTable", () => {
     expect(table[0].points).toBe(3);
     expect(table[0].played).toBe(1);
   });
+
+  test("head-to-head breaks ties when overall pts/GD/GF are equal", () => {
+    // Teams 1 and 2 finish identical overall (6 pts, +1 GD, 2 GF), but team 2
+    // beat team 1 head-to-head, so FIFA ranks team 2 above team 1 — even though
+    // a naive teamId fallback would put team 1 first.
+    const table = computeGroupTable(
+      [1, 2, 3, 4],
+      [
+        m(2, 1, 1, 0), // head-to-head: 2 beats 1
+        m(2, 3, 1, 0),
+        m(4, 2, 1, 0),
+        m(1, 3, 1, 0),
+        m(1, 4, 1, 0),
+        m(3, 4, 0, 0),
+      ],
+    );
+    expect(table.map((r) => r.teamId)).toEqual([2, 1, 4, 3]);
+  });
+
+  test("a head-to-head cycle falls back to deterministic order", () => {
+    // 1 beats 2, 2 beats 3, 3 beats 1 — all by the same scoreline, so every
+    // team is identical overall AND in the head-to-head mini-table. Order must
+    // still be deterministic (ascending teamId).
+    const table = computeGroupTable(
+      [1, 2, 3],
+      [m(1, 2, 1, 0), m(2, 3, 1, 0), m(3, 1, 1, 0)],
+    );
+    expect(table.map((r) => r.teamId)).toEqual([1, 2, 3]);
+  });
 });

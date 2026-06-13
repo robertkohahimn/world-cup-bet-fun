@@ -3,8 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { getDb } from "../db";
 import { requireUser } from "../session";
+import { propagateBracket } from "../propagate";
 import { evaluateLine, settleRoomMatch, type Participant, type Side } from "../settle";
-import { betDeadline, deadlinePassed } from "../types";
+import { betDeadline, deadlinePassed, parseKickoff } from "../types";
 import type { LineRow, MatchRow, RoomRow } from "../types";
 
 export interface ActionState {
@@ -49,18 +50,15 @@ export async function setLine(_prev: ActionState, formData: FormData): Promise<A
     if (existing) {
       if (existing.team_id === teamId && existing.spread === spread) return;
       // The line's meaning changed — existing picks no longer mean what
-      // members chose, so clear them and let everyone re-pick.
+      // members chose. Clear them AND replace the row so the line gets a fresh
+      // id: any room page rendered against the old line now posts a dead id,
+      // so a stale form can't silently re-pick against the new spread.
       db.prepare("DELETE FROM bets WHERE line_id = ?").run(existing.id);
-      db.prepare("UPDATE lines SET team_id = ?, spread = ? WHERE id = ?").run(
-        teamId,
-        spread,
-        existing.id,
-      );
-    } else {
-      db.prepare(
-        "INSERT INTO lines (room_id, match_id, team_id, spread) VALUES (?, ?, ?, ?)",
-      ).run(roomId, matchId, teamId, spread);
+      db.prepare("DELETE FROM lines WHERE id = ?").run(existing.id);
     }
+    db.prepare(
+      "INSERT INTO lines (room_id, match_id, team_id, spread) VALUES (?, ?, ?, ?)",
+    ).run(roomId, matchId, teamId, spread);
   })();
 
   revalidatePath(`/rooms/${room.code}`);
@@ -127,14 +125,35 @@ export async function recordResult(_prev: ActionState, formData: FormData): Prom
     | MatchRow
     | undefined;
   if (!match) return { error: "Unknown match." };
-  if (new Date(match.kickoff_utc) > new Date()) {
+  const kickoff = parseKickoff(match.kickoff_utc);
+  if (!kickoff) return { error: "This match has no valid kickoff time set." };
+  if (kickoff > new Date()) {
     return { error: "That match hasn't kicked off yet." };
+  }
+
+  // Knockout matches need a single winner so the bracket can advance. A level
+  // score means it went to penalties — the admin picks who went through.
+  const isKnockout = match.stage !== "group";
+  let winnerTeamId: number | null = null;
+  if (isKnockout) {
+    if (match.home_team_id == null || match.away_team_id == null) {
+      return { error: "Both teams for this match aren't decided yet." };
+    }
+    if (homeGoals === awayGoals) {
+      const provided = Number(formData.get("winnerTeamId"));
+      if (provided !== match.home_team_id && provided !== match.away_team_id) {
+        return { error: "A level knockout score needs a penalty-shootout winner." };
+      }
+      winnerTeamId = provided;
+    } else {
+      winnerTeamId = homeGoals > awayGoals ? match.home_team_id : match.away_team_id;
+    }
   }
 
   db.transaction(() => {
     db.prepare(
-      "UPDATE matches SET home_goals = ?, away_goals = ?, status = 'finished' WHERE id = ?",
-    ).run(homeGoals, awayGoals, matchId);
+      "UPDATE matches SET home_goals = ?, away_goals = ?, winner_team_id = ?, status = 'finished' WHERE id = ?",
+    ).run(homeGoals, awayGoals, winnerTeamId, matchId);
 
     const lines = db.prepare("SELECT * FROM lines WHERE match_id = ?").all(matchId) as LineRow[];
     const insertSettlement = db.prepare(
@@ -152,7 +171,8 @@ export async function recordResult(_prev: ActionState, formData: FormData): Prom
       );
 
       // Only members who joined before the betting deadline are on the hook.
-      const deadlineIso = betDeadline(match.kickoff_utc).toISOString();
+      // kickoff is validated above, so betDeadline is non-null here.
+      const deadlineIso = betDeadline(match.kickoff_utc)!.toISOString();
       const participants = db
         .prepare(
           `SELECT rm.user_id AS userId, b.side
@@ -166,6 +186,10 @@ export async function recordResult(_prev: ActionState, formData: FormData): Prom
         insertSettlement.run(line.id, delta.userId, delta.delta, delta.result);
       }
     }
+
+    // A finished result may decide a group or advance a knockout tie — fill in
+    // any downstream bracket slots that are now known.
+    propagateBracket(db);
   })();
 
   revalidatePath("/", "layout");

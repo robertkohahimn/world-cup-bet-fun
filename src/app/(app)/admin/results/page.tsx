@@ -1,8 +1,20 @@
 import { redirect } from "next/navigation";
 import { LocalTime } from "@/components/LocalTime";
-import { RecordResultForm } from "@/components/RecordResultForm";
-import { matchesAwaitingResult, recentResults } from "@/lib/queries";
+import { RecordResultForm, type KnockoutTeams } from "@/components/RecordResultForm";
+import { matchesAwaitingResult, recentResults, type MatchWithTeams } from "@/lib/queries";
 import { requireUser } from "@/lib/session";
+
+/** Penalty-winner picker data — only for knockout matches with both teams set. */
+function knockoutTeams(m: MatchWithTeams): KnockoutTeams | undefined {
+  if (m.stage === "group" || !m.home || !m.away) return undefined;
+  return {
+    homeId: m.home.id,
+    homeName: m.home.name,
+    awayId: m.away.id,
+    awayName: m.away.name,
+    currentWinnerId: m.winner_team_id,
+  };
+}
 
 export const metadata = { title: "Results desk — WCBet.fun" };
 export const dynamic = "force-dynamic";
@@ -42,7 +54,12 @@ export default async function ResultsDeskPage() {
                     M{m.id} · <LocalTime iso={m.kickoff_utc} /> · {m.venue}, {m.city}
                   </div>
                 </div>
-                <RecordResultForm matchId={m.id} homeGoals={m.home_goals} awayGoals={m.away_goals} />
+                <RecordResultForm
+                  matchId={m.id}
+                  homeGoals={m.home_goals}
+                  awayGoals={m.away_goals}
+                  knockout={knockoutTeams(m)}
+                />
               </li>
             ))}
           </ul>
@@ -57,7 +74,12 @@ export default async function ResultsDeskPage() {
               <div className="font-semibold">
                 {m.home?.flag} {m.home?.name} <span className="score-num text-xl">{m.home_goals}–{m.away_goals}</span> {m.away?.name} {m.away?.flag}
               </div>
-              <RecordResultForm matchId={m.id} homeGoals={m.home_goals} awayGoals={m.away_goals} />
+              <RecordResultForm
+                matchId={m.id}
+                homeGoals={m.home_goals}
+                awayGoals={m.away_goals}
+                knockout={knockoutTeams(m)}
+              />
             </li>
           ))}
           {recent.length === 0 && (

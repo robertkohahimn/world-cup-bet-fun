@@ -15,7 +15,7 @@ import {
   type LineDetail,
 } from "@/lib/queries";
 import { requireUser } from "@/lib/session";
-import { betDeadline, deadlinePassed } from "@/lib/types";
+import { betDeadlineIso, deadlinePassed } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +46,9 @@ function LineTicket({ detail, userId }: { detail: LineDetail; userId: number }) 
         <span className="display text-3xl text-pitch">
           {favored.flag} {favored.name} +{line.spread}
         </span>
-        {!finished && <Countdown deadlineIso={betDeadline(match.kickoff_utc).toISOString()} />}
+        {!finished && betDeadlineIso(match.kickoff_utc) && (
+          <Countdown deadlineIso={betDeadlineIso(match.kickoff_utc)!} />
+        )}
         {finished && !settled && (
           <span className="bg-ink/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-ink-soft">
             settling…

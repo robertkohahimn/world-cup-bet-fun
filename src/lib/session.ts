@@ -5,19 +5,39 @@ import { getDb } from "./db";
 import type { UserRow } from "./types";
 
 const COOKIE = "wcbet_session";
-const secret = new TextEncoder().encode(
-  process.env.SESSION_SECRET ?? "wcbet-dev-secret-change-me-in-prod",
-);
+
+let cachedSecret: Uint8Array | null = null;
+
+/**
+ * Resolve the JWT signing key lazily (at request time, not module load) so a
+ * production build doesn't trip the guard before env vars are wired up. A shared
+ * default would let anyone forge session tokens, so production must set its own.
+ */
+function getSecret(): Uint8Array {
+  if (cachedSecret) return cachedSecret;
+  const fromEnv = process.env.SESSION_SECRET;
+  if (fromEnv && fromEnv.length >= 16) {
+    cachedSecret = new TextEncoder().encode(fromEnv);
+  } else if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "SESSION_SECRET must be set to a value of at least 16 characters in production.",
+    );
+  } else {
+    cachedSecret = new TextEncoder().encode("wcbet-dev-secret-change-me-in-prod");
+  }
+  return cachedSecret;
+}
 
 export async function createSession(userId: number) {
   const token = await new SignJWT({ sub: String(userId) })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("30d")
-    .sign(secret);
+    .sign(getSecret());
   (await cookies()).set(COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: 60 * 60 * 24 * 30,
   });
@@ -31,7 +51,7 @@ export async function getUserId(): Promise<number | null> {
   const token = (await cookies()).get(COOKIE)?.value;
   if (!token) return null;
   try {
-    const { payload } = await jwtVerify(token, secret);
+    const { payload } = await jwtVerify(token, getSecret());
     return payload.sub ? Number(payload.sub) : null;
   } catch {
     return null;

@@ -30,6 +30,7 @@ export interface MatchRow {
   away_label: string | null;
   home_goals: number | null;
   away_goals: number | null;
+  winner_team_id: number | null;
   status: "scheduled" | "finished";
 }
 
@@ -71,10 +72,30 @@ export const STAGE_NAMES: Record<MatchRow["stage"], string> = {
 /** Betting closes this many hours before kickoff. */
 export const BET_DEADLINE_HOURS = 6;
 
-export function betDeadline(kickoffUtc: string): Date {
-  return new Date(new Date(kickoffUtc).getTime() - BET_DEADLINE_HOURS * 3600_000);
+/** Kickoffs are stored as ISO-8601 UTC (e.g. 2026-06-11T20:00:00Z). */
+const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
+
+/** Parse a kickoff string strictly as UTC. Returns null on anything malformed. */
+export function parseKickoff(kickoffUtc: string): Date | null {
+  if (!ISO_UTC.test(kickoffUtc)) return null;
+  const d = new Date(kickoffUtc);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Deadline = kickoff − 6h. Null when the kickoff string is unparseable. */
+export function betDeadline(kickoffUtc: string): Date | null {
+  const k = parseKickoff(kickoffUtc);
+  return k ? new Date(k.getTime() - BET_DEADLINE_HOURS * 3600_000) : null;
 }
 
 export function deadlinePassed(kickoffUtc: string, now = new Date()): boolean {
-  return now >= betDeadline(kickoffUtc);
+  const deadline = betDeadline(kickoffUtc);
+  // Fail safe: an unparseable kickoff is treated as closed, never open for bets.
+  if (!deadline) return true;
+  return now >= deadline;
+}
+
+/** Deadline as an ISO string for UI components, or null when unparseable. */
+export function betDeadlineIso(kickoffUtc: string): string | null {
+  return betDeadline(kickoffUtc)?.toISOString() ?? null;
 }

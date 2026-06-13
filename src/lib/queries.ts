@@ -1,6 +1,6 @@
 import { getDb } from "./db";
 import { computeGroupTable, type TableRow } from "./standings";
-import { betDeadline } from "./types";
+import { deadlinePassed } from "./types";
 import type { BetRow, LineRow, MatchRow, RoomRow, TeamRow } from "./types";
 
 export interface MatchWithTeams extends MatchRow {
@@ -241,7 +241,7 @@ export function roomLines(roomId: number, userId: number, now = new Date()): Lin
       db.prepare("SELECT COUNT(*) AS c FROM bets WHERE line_id = ?").get(line.id) as { c: number }
     ).c;
 
-    const locked = now >= betDeadline(match.kickoff_utc);
+    const locked = deadlinePassed(match.kickoff_utc, now);
     const picks = locked
       ? (db
           .prepare(
@@ -399,5 +399,5 @@ export function pendingPicks(userId: number, now = new Date()): PendingPick[] {
       const favored = (match.home?.id === r.teamId ? match.home : match.away) as TeamRow;
       return { roomName: r.roomName, roomCode: r.roomCode, lineId: r.lineId, match, favored, spread: r.spread };
     })
-    .filter((p) => now < betDeadline(p.match.kickoff_utc));
+    .filter((p) => !deadlinePassed(p.match.kickoff_utc, now));
 }

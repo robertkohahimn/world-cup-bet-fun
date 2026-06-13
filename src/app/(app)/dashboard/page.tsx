@@ -10,7 +10,7 @@ import {
   userRooms,
 } from "@/lib/queries";
 import { requireUser } from "@/lib/session";
-import { betDeadline } from "@/lib/types";
+import { betDeadlineIso } from "@/lib/types";
 
 export const metadata = { title: "Dashboard — WCBet.fun" };
 export const dynamic = "force-dynamic";
@@ -64,7 +64,9 @@ export default async function DashboardPage() {
                   </span>
                 </span>
                 <span className="flex items-center gap-2">
-                  <Countdown deadlineIso={betDeadline(p.match.kickoff_utc).toISOString()} />
+                  {betDeadlineIso(p.match.kickoff_utc) && (
+                    <Countdown deadlineIso={betDeadlineIso(p.match.kickoff_utc)!} />
+                  )}
                   <Link
                     href={`/rooms/${p.roomCode}`}
                     className="bg-signal px-3 py-1 text-xs font-bold uppercase tracking-wider text-paper hover:opacity-90"
@@ -189,10 +191,10 @@ export default async function DashboardPage() {
 
           <p className="text-xs leading-relaxed text-ink-faint">
             Next deadline closes 6 hours before kickoff
-            {upcoming[0] && (
+            {upcoming[0] && betDeadlineIso(upcoming[0].kickoff_utc) && (
               <>
                 {" "}
-                — first up <LocalTime iso={betDeadline(upcoming[0].kickoff_utc).toISOString()} />
+                — first up <LocalTime iso={betDeadlineIso(upcoming[0].kickoff_utc)!} />
               </>
             )}
             .

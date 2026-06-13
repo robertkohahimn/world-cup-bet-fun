@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS matches (
   away_label TEXT,
   home_goals INTEGER,
   away_goals INTEGER,
+  winner_team_id INTEGER REFERENCES teams(id),  -- knockout decider when score is level (penalties)
   status TEXT NOT NULL DEFAULT 'scheduled'  -- scheduled | finished
 );
 
@@ -110,15 +111,29 @@ interface FixtureMatch {
   score?: [number, number];
 }
 
-function createDb(): Database.Database {
-  const dataDir = path.join(process.cwd(), "data");
-  fs.mkdirSync(dataDir, { recursive: true });
-  const db = new Database(path.join(dataDir, "wcbet.db"));
+/** Build a fully schema'd, migrated, and seeded database at the given path.
+ *  Exposed mainly so tests can spin up an isolated DB instead of the app file. */
+export function createDatabase(dbPath: string): Database.Database {
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  const db = new Database(dbPath);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   db.exec(SCHEMA);
+  migrate(db);
   seed(db);
   return db;
+}
+
+function createDb(): Database.Database {
+  return createDatabase(path.join(process.cwd(), "data", "wcbet.db"));
+}
+
+/** Additive migrations for databases created before a column existed. */
+function migrate(db: Database.Database) {
+  const cols = db.prepare("PRAGMA table_info(matches)").all() as { name: string }[];
+  if (!cols.some((c) => c.name === "winner_team_id")) {
+    db.exec("ALTER TABLE matches ADD COLUMN winner_team_id INTEGER REFERENCES teams(id)");
+  }
 }
 
 function seed(db: Database.Database) {
