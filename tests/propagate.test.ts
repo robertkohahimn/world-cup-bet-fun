@@ -5,14 +5,22 @@ import { createDatabase } from "../src/lib/db";
 import { propagateBracket } from "../src/lib/propagate";
 
 // Isolated DB files so running the suite never touches the dev/app database.
-const dbPaths: string[] = [];
-afterAll(() => dbPaths.forEach((p) => execSync(`rm -f ${p}*`)));
+const opened: { db: DatabaseT.Database; path: string }[] = [];
+afterAll(() => {
+  // Close every handle before removing its files, so the delete can't race an
+  // open connection (and its -wal/-shm) and flake on locked files.
+  for (const { db, path } of opened) {
+    db.close();
+    execSync(`rm -f ${path}*`);
+  }
+});
 
 function freshDb(tag: string): DatabaseT.Database {
   const path = `data/_test_${tag}.db`;
   execSync(`rm -f ${path}*`);
-  dbPaths.push(path);
-  return createDatabase(path);
+  const db = createDatabase(path);
+  opened.push({ db, path });
+  return db;
 }
 
 const rank = (db: DatabaseT.Database, id: number) =>
