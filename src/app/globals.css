@@ -1,0 +1,98 @@
+@import "tailwindcss";
+
+@theme {
+  /* Matchday Programme palette — warm paper, pitch-green ink, signal orange */
+  --color-paper: oklch(96.5% 0.013 90);
+  --color-paper-warm: oklch(94% 0.02 88);
+  --color-card: oklch(98.5% 0.008 95);
+  --color-ink: oklch(25% 0.025 155);
+  --color-ink-soft: oklch(42% 0.02 155);
+  --color-ink-faint: oklch(58% 0.015 150);
+  --color-pitch: oklch(42% 0.105 155);
+  --color-pitch-deep: oklch(32% 0.085 155);
+  --color-pitch-tint: oklch(92% 0.035 155);
+  --color-signal: oklch(60% 0.185 40);
+  --color-signal-tint: oklch(94% 0.045 45);
+  --color-gold: oklch(78% 0.13 85);
+  --color-line: oklch(86% 0.015 100);
+
+  --font-display: var(--font-barlow), "Arial Narrow", sans-serif;
+  --font-body: var(--font-archivo), system-ui, sans-serif;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+}
+
+/* Oversized condensed headlines, programme-style */
+.display {
+  font-family: var(--font-display);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  line-height: 0.92;
+}
+
+.score-num {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Ticket stub: perforated left edge punched out of the page color */
+.ticket {
+  position: relative;
+  background: var(--color-card);
+  border: 1px solid var(--color-line);
+}
+.ticket::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 -1px;
+  width: 12px;
+  background-image: radial-gradient(circle at 0 6px, var(--color-paper) 4px, transparent 4.5px);
+  background-size: 12px 12px;
+  background-repeat: repeat-y;
+}
+
+.perf-divider {
+  border-top: 2px dashed var(--color-line);
+}
+
+/* Paper grain, very subtle */
+.grain {
+  position: relative;
+}
+.grain::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.rise {
+  animation: rise-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.rise-1 { animation-delay: 0.05s; }
+.rise-2 { animation-delay: 0.12s; }
+.rise-3 { animation-delay: 0.19s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rise, .rise-1, .rise-2, .rise-3 {
+    animation: none;
+  }
+}
