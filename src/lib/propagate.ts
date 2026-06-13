@@ -69,17 +69,34 @@ function matchOutcome(
 }
 
 /**
- * Fill in concrete team ids for any knockout match whose placeholder slots are
- * now resolvable, then repeat until nothing more can be filled. Idempotent and
- * safe to call after every recorded result. Runs inside the caller's transaction.
+ * Resolve concrete team ids for knockout matches from their placeholder slots,
+ * looping until nothing more changes. Idempotent and safe to call after every
+ * recorded result; runs inside the caller's transaction. As well as filling
+ * empty slots, it *re-reconciles* already-filled ones when an upstream result is
+ * corrected — but only for matches that are still scheduled and have no lines
+ * yet, so it never rewrites the teams of a played match or one already bet on.
  */
 export function propagateBracket(db: Database.Database) {
   const tables = new Map<string, TableRow[] | null>();
   for (const g of GROUPS) tables.set(g, groupTable(db, g));
   const groupsComplete = GROUPS.every((g) => tables.get(g) != null);
 
-  const setHome = db.prepare("UPDATE matches SET home_team_id = ? WHERE id = ? AND home_team_id IS NULL");
-  const setAway = db.prepare("UPDATE matches SET away_team_id = ? WHERE id = ? AND away_team_id IS NULL");
+  // Write a resolved team into a slot — but only for a match that hasn't been
+  // played and that no room has bet on yet. This both fills empty slots and
+  // *re-reconciles* them when an upstream result is corrected, while refusing to
+  // mutate the teams of a finished match or one with lines already on it (that
+  // would invalidate recorded scores or placed bets — a deeper correction the
+  // admin must make by re-recording those matches). Returns true if it changed.
+  const updatable =
+    "status = 'scheduled' AND NOT EXISTS (SELECT 1 FROM lines WHERE match_id = matches.id)";
+  const setHome = db.prepare(
+    `UPDATE matches SET home_team_id = ? WHERE id = ? AND ${updatable} AND (home_team_id IS NULL OR home_team_id <> ?)`,
+  );
+  const setAway = db.prepare(
+    `UPDATE matches SET away_team_id = ? WHERE id = ? AND ${updatable} AND (away_team_id IS NULL OR away_team_id <> ?)`,
+  );
+  const putHome = (teamId: number, matchId: number) => setHome.run(teamId, matchId, teamId).changes > 0;
+  const putAway = (teamId: number, matchId: number) => setAway.run(teamId, matchId, teamId).changes > 0;
 
   // Assign the eight best-third slots together (a constrained matching needs the
   // full picture). Only possible once every group has finished.
@@ -111,7 +128,7 @@ export function propagateBracket(db: Database.Database) {
       const assignment = assignThirdSlots(slots, qualifiers);
       if (assignment) {
         for (const [matchId, teamId] of assignment) {
-          (slotSide.get(matchId) === "home" ? setHome : setAway).run(teamId, matchId);
+          (slotSide.get(matchId) === "home" ? putHome : putAway)(teamId, matchId);
         }
       }
     }
@@ -136,23 +153,23 @@ export function propagateBracket(db: Database.Database) {
     }
   };
 
+  // Revisit every not-yet-played knockout match (not just empty ones) so a
+  // corrected upstream result re-flows downstream, looping until nothing more
+  // changes. resolve() only returns a concrete id once its dependency is
+  // decided, so a slot is never wiped back to NULL mid-flight.
   let changed = true;
   while (changed) {
     changed = false;
     const pending = db
       .prepare(
-        "SELECT id, home_team_id, away_team_id, home_label, away_label FROM matches WHERE stage != 'group' AND (home_team_id IS NULL OR away_team_id IS NULL)",
+        "SELECT id, home_team_id, away_team_id, home_label, away_label FROM matches WHERE stage != 'group' AND status = 'scheduled'",
       )
       .all() as KnockoutRow[];
     for (const m of pending) {
-      if (m.home_team_id == null) {
-        const id = resolve(m.home_label);
-        if (id != null) changed = setHome.run(id, m.id).changes > 0 || changed;
-      }
-      if (m.away_team_id == null) {
-        const id = resolve(m.away_label);
-        if (id != null) changed = setAway.run(id, m.id).changes > 0 || changed;
-      }
+      const homeId = resolve(m.home_label);
+      if (homeId != null && putHome(homeId, m.id)) changed = true;
+      const awayId = resolve(m.away_label);
+      if (awayId != null && putAway(awayId, m.id)) changed = true;
     }
   }
 }

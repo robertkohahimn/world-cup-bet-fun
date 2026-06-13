@@ -36,6 +36,11 @@ export function RecordResultForm({
 
   const level = home !== "" && away !== "" && Number(home) === Number(away);
   const needsWinner = Boolean(knockout) && level;
+  // Only trust the stored winner as the default when the stored score was
+  // itself a draw (a real shootout). If a decisive result is being corrected
+  // to a draw, force a fresh pick rather than carrying over the old winner.
+  const storedLevel = homeGoals != null && awayGoals != null && homeGoals === awayGoals;
+  const defaultWinner = storedLevel ? knockout?.currentWinnerId ?? "" : "";
 
   return (
     <form action={formAction} className="flex flex-wrap items-center gap-2">
@@ -67,7 +72,7 @@ export function RecordResultForm({
         <select
           name="winnerTeamId"
           required
-          defaultValue={knockout.currentWinnerId ?? ""}
+          defaultValue={defaultWinner}
           className="border border-line bg-card px-2 py-1.5 text-xs focus:outline-none focus:border-pitch"
           aria-label="Penalty shootout winner"
         >
