@@ -125,7 +125,12 @@ export function createDatabase(dbPath: string): Database.Database {
 }
 
 function createDb(): Database.Database {
-  return createDatabase(path.join(process.cwd(), "data", "wcbet.db"));
+  // In production the DB file lives on a persistent volume (set WCBET_DB_PATH to
+  // a path under the mount, e.g. /data/wcbet.db) so it survives redeploys. The
+  // seed fixture is read from the image's data/ dir, kept separate from the
+  // volume so the mount never shadows it. Locally it defaults to data/wcbet.db.
+  const dbPath = process.env.WCBET_DB_PATH ?? path.join(process.cwd(), "data", "wcbet.db");
+  return createDatabase(dbPath);
 }
 
 /** Additive migrations for databases created before a column existed. */
